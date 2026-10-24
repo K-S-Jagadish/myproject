@@ -2,20 +2,36 @@
 pipeline {
     agent any
 
-    tools {
-        jdk 'JDK17'
-        maven 'MAVEN3.9.9'
-    }
-
     options {
         timestamps()
         disableConcurrentBuilds()
+    }
+
+    environment {
+        NEXUS_URL = '10.0.0.63:8081'
+        NEXUS_PROTOCOL = 'http'
+        NEXUS_REPOSITORY = 'vprofile-release'
+        NEXUS_CREDENTIAL_ID = 'nexus-credentials'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Verify Build Environment') {
+            steps {
+                sh '''
+                    set -e
+                    echo "===== Java ====="
+                    java -version
+                    echo "===== Maven ====="
+                    mvn -version
+                    echo "===== Git ====="
+                    git --version
+                '''
             }
         }
 
@@ -51,6 +67,54 @@ pipeline {
             steps {
                 timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Publish WAR to Nexus') {
+            steps {
+                script {
+                    def pom = readMavenPom file: 'pom.xml'
+
+                    if (pom.packaging != 'war') {
+                        error "Expected WAR packaging, found: ${pom.packaging}"
+                    }
+
+                    def warFiles = findFiles(glob: 'target/*.war')
+
+                    if (warFiles.length == 0) {
+                        error 'No WAR file found in target/'
+                    }
+
+                    def warFile = warFiles[0].path
+                    def artifactVersion = "${pom.version}-${env.BUILD_NUMBER}"
+
+                    nexusArtifactUploader(
+                        nexusVersion: 'nexus3',
+                        protocol: env.NEXUS_PROTOCOL,
+                        nexusUrl: env.NEXUS_URL,
+                        groupId: pom.groupId,
+                        artifactId: pom.artifactId,
+                        version: artifactVersion,
+                        repository: env.NEXUS_REPOSITORY,
+                        credentialsId: env.NEXUS_CREDENTIAL_ID,
+                        artifacts: [
+                            [
+                                artifactId: pom.artifactId,
+                                classifier: '',
+                                file: warFile,
+                                type: 'war'
+                            ],
+                            [
+                                artifactId: pom.artifactId,
+                                classifier: '',
+                                file: 'pom.xml',
+                                type: 'pom'
+                            ]
+                        ]
+                    )
+
+                    echo "Published ${pom.artifactId}:${artifactVersion} to Nexus"
                 }
             }
         }
