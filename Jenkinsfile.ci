@@ -39,14 +39,20 @@ pipeline {
             steps {
                 sh 'mvn -B clean verify'
             }
+
             post {
                 always {
-                    junit allowEmptyResults: true,
-                          testResults: '**/target/surefire-reports/*.xml'
+                    junit(
+                        allowEmptyResults: true,
+                        testResults: '**/target/surefire-reports/*.xml'
+                    )
                 }
+
                 success {
-                    archiveArtifacts artifacts: 'target/*.war',
-                                     fingerprint: true
+                    archiveArtifacts(
+                        artifacts: 'target/*.war',
+                        fingerprint: true
+                    )
                 }
             }
         }
@@ -55,7 +61,8 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube-Server') {
                     sh '''
-                        mvn -B sonar:sonar \
+                        mvn -B \
+                          org.sonarsource.scanner.maven:sonar-maven-plugin:5.3.0.6276:sonar \
                           -Dsonar.projectKey=vprofile \
                           -Dsonar.projectName=vprofile
                     '''
@@ -74,10 +81,12 @@ pipeline {
         stage('Publish WAR to Nexus') {
             steps {
                 script {
-                    def pom = readMavenPom file: 'pom.xml'
+                    def pom = readMavenPom(file: 'pom.xml')
 
                     if (pom.packaging != 'war') {
-                        error "Expected WAR packaging, found: ${pom.packaging}"
+                        error(
+                            "Expected WAR packaging, found: ${pom.packaging}"
+                        )
                     }
 
                     def warFiles = findFiles(glob: 'target/*.war')
@@ -87,7 +96,8 @@ pipeline {
                     }
 
                     def warFile = warFiles[0].path
-                    def artifactVersion = "${pom.version}-${env.BUILD_NUMBER}"
+                    def artifactVersion =
+                        "${pom.version}-${env.BUILD_NUMBER}"
 
                     nexusArtifactUploader(
                         nexusVersion: 'nexus3',
@@ -114,7 +124,9 @@ pipeline {
                         ]
                     )
 
-                    echo "Published ${pom.artifactId}:${artifactVersion} to Nexus"
+                    echo(
+                        "Published ${pom.groupId}:${pom.artifactId}:${artifactVersion} to Nexus"
+                    )
                 }
             }
         }
