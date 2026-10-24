@@ -78,71 +78,74 @@ pipeline {
             }
         }
 
-        
-stage('Publish WAR to Nexus') {
-    steps {
-        script {
-            // Read application details directly from Maven
-            def groupId = sh(
-                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.groupId',
-                returnStdout: true
-            ).trim()
+        stage('Publish WAR to Nexus') {
+            steps {
+                script {
+                    // Read project metadata from Maven
+                    def groupId = sh(
+                        script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.groupId',
+                        returnStdout: true
+                    ).trim()
 
-            def artifactId = sh(
-                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.artifactId',
-                returnStdout: true
-            ).trim()
+                    def artifactId = sh(
+                        script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.artifactId',
+                        returnStdout: true
+                    ).trim()
 
-            def version = sh(
-                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.version',
-                returnStdout: true
-            ).trim()
+                    def version = sh(
+                        script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.version',
+                        returnStdout: true
+                    ).trim()
 
-            def packaging = sh(
-                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.packaging',
-                returnStdout: true
-            ).trim()
+                    def packaging = sh(
+                        script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.packaging',
+                        returnStdout: true
+                    ).trim()
 
-            if (packaging != 'war') {
-                error("Expected WAR packaging, but found: ${packaging}")
-            }
+                    if (packaging != 'war') {
+                        error("Expected WAR packaging, but found: ${packaging}")
+                    }
 
-            def warFile = sh(
-                script: 'find target -maxdepth 1 -type f -name "*.war" | head -n 1',
-                returnStdout: true
-            ).trim()
+                    // Find the built WAR file
+                    def warFile = sh(
+                        script: 'find target -maxdepth 1 -type f -name "*.war" | head -n 1',
+                        returnStdout: true
+                    ).trim()
 
-            if (!warFile) {
-                error('No WAR file found in target/')
-            }
+                    if (!warFile) {
+                        error('No WAR file found in target/')
+                    }
 
-            def publishVersion = "${version}-${env.BUILD_NUMBER}"
+                    // Unique version for each Jenkins build
+                    def publishVersion = "${version}-${env.BUILD_NUMBER}"
 
-            echo "Group ID: ${groupId}"
-            echo "Artifact ID: ${artifactId}"
-            echo "Publishing version: ${publishVersion}"
-            echo "WAR file: ${warFile}"
+                    echo "Group ID: ${groupId}"
+                    echo "Artifact ID: ${artifactId}"
+                    echo "Publishing version: ${publishVersion}"
+                    echo "WAR file: ${warFile}"
 
-            nexusArtifactUploader(
-                nexusVersion: 'nexus3',
-                protocol: env.NEXUS_PROTOCOL,
-                nexusUrl: env.NEXUS_URL,
-                groupId: groupId,
-                artifactId: artifactId,
-                version: publishVersion,
-                repository: env.NEXUS_REPOSITORY,
-                credentialsId: env.NEXUS_CREDENTIAL_ID,
-                artifacts: [
-                    [
+                    nexusArtifactUploader(
+                        nexusVersion: 'nexus3',
+                        protocol: env.NEXUS_PROTOCOL,
+                        nexusUrl: env.NEXUS_URL,
+                        groupId: groupId,
                         artifactId: artifactId,
-                        classifier: '',
-                        file: warFile,
-                        type: 'war'
-                    ]
-                ]
-            )
+                        version: publishVersion,
+                        repository: env.NEXUS_REPOSITORY,
+                        credentialsId: env.NEXUS_CREDENTIAL_ID,
+                        artifacts: [
+                            [
+                                artifactId: artifactId,
+                                classifier: '',
+                                file: warFile,
+                                type: 'war'
+                            ]
+                        ]
+                    )
 
-            echo "Successfully published ${artifactId}:${publishVersion} to Nexus"
+                    echo "Successfully published ${artifactId}:${publishVersion} to Nexus"
+                }
+            }
         }
     }
 }
