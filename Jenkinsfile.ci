@@ -11,7 +11,7 @@ pipeline {
         NEXUS_URL = '10.0.0.63:8081'
         NEXUS_PROTOCOL = 'http'
         NEXUS_REPOSITORY = 'vprofile-release'
-        NEXUS_CREDENTIAL_ID = 'jenkins-deploy'
+        NEXUS_CREDENTIAL_ID = 'nexus-deploy-user-2'
     }
 
     stages {
