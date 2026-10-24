@@ -1,5 +1,11 @@
+
 pipeline {
     agent any
+
+    tools {
+        jdk 'JDK17'
+        maven 'MAVEN3.9.9'
+    }
 
     options {
         timestamps()
@@ -7,15 +13,9 @@ pipeline {
     }
 
     stages {
-        stage('Verify Build Environment') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    echo "===== JAVA ====="
-                    java -version
-
-                    echo "===== MAVEN ====="
-                    mvn -version
-                '''
+                checkout scm
             }
         }
 
@@ -23,29 +23,36 @@ pipeline {
             steps {
                 sh 'mvn -B clean verify'
             }
-        }
-
-        stage('Verify WAR Artifact') {
-            steps {
-                sh '''
-                    echo "===== GENERATED WAR FILES ====="
-                    ls -lh target/*.war
-                '''
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                          testResults: '**/target/surefire-reports/*.xml'
+                }
+                success {
+                    archiveArtifacts artifacts: 'target/*.war',
+                                     fingerprint: true
+                }
             }
         }
-    }
 
-    post {
-        success {
-            archiveArtifacts(
-                artifacts: 'target/*.war',
-                fingerprint: true
-            )
-            echo 'CI pipeline completed successfully.'
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube-Server') {
+                    sh '''
+                        mvn -B sonar:sonar \
+                          -Dsonar.projectKey=vprofile \
+                          -Dsonar.projectName=vprofile
+                    '''
+                }
+            }
         }
 
-        failure {
-            echo 'CI pipeline failed. Check the stage console output.'
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
         }
     }
 }
