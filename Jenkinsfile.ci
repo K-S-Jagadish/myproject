@@ -124,24 +124,25 @@ pipeline {
                     echo "Publishing version: ${publishVersion}"
                     echo "WAR file: ${warFile}"
 
+                    
                     nexusArtifactUploader(
                         nexusVersion: 'nexus3',
                         protocol: env.NEXUS_PROTOCOL,
                         nexusUrl: env.NEXUS_URL,
                         groupId: groupId,
-                        artifactId: artifactId,
                         version: publishVersion,
                         repository: env.NEXUS_REPOSITORY,
-                        credentialsId: env.NEXUS_CREDENTIAL_ID,
+                        credentialsId: 'jenkins-deploy',
                         artifacts: [
                             [
                                 artifactId: artifactId,
                                 classifier: '',
                                 file: warFile,
                                 type: 'war'
-                            ]
+                            ]    
                         ]
                     )
+
 
                     echo "Successfully published ${artifactId}:${publishVersion} to Nexus"
                 }
