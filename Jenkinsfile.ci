@@ -78,57 +78,71 @@ pipeline {
             }
         }
 
-        stage('Publish WAR to Nexus') {
-            steps {
-                script {
-                    def pom = readMavenPom(file: 'pom.xml')
+        
+stage('Publish WAR to Nexus') {
+    steps {
+        script {
+            // Read application details directly from Maven
+            def groupId = sh(
+                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.groupId',
+                returnStdout: true
+            ).trim()
 
-                    if (pom.packaging != 'war') {
-                        error(
-                            "Expected WAR packaging, found: ${pom.packaging}"
-                        )
-                    }
+            def artifactId = sh(
+                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.artifactId',
+                returnStdout: true
+            ).trim()
 
-                    def warFiles = findFiles(glob: 'target/*.war')
+            def version = sh(
+                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.version',
+                returnStdout: true
+            ).trim()
 
-                    if (warFiles.length == 0) {
-                        error 'No WAR file found in target/'
-                    }
+            def packaging = sh(
+                script: 'mvn -q -DforceStdout help:evaluate -Dexpression=project.packaging',
+                returnStdout: true
+            ).trim()
 
-                    def warFile = warFiles[0].path
-                    def artifactVersion =
-                        "${pom.version}-${env.BUILD_NUMBER}"
-
-                    nexusArtifactUploader(
-                        nexusVersion: 'nexus3',
-                        protocol: env.NEXUS_PROTOCOL,
-                        nexusUrl: env.NEXUS_URL,
-                        groupId: pom.groupId,
-                        artifactId: pom.artifactId,
-                        version: artifactVersion,
-                        repository: env.NEXUS_REPOSITORY,
-                        credentialsId: env.NEXUS_CREDENTIAL_ID,
-                        artifacts: [
-                            [
-                                artifactId: pom.artifactId,
-                                classifier: '',
-                                file: warFile,
-                                type: 'war'
-                            ],
-                            [
-                                artifactId: pom.artifactId,
-                                classifier: '',
-                                file: 'pom.xml',
-                                type: 'pom'
-                            ]
-                        ]
-                    )
-
-                    echo(
-                        "Published ${pom.groupId}:${pom.artifactId}:${artifactVersion} to Nexus"
-                    )
-                }
+            if (packaging != 'war') {
+                error("Expected WAR packaging, but found: ${packaging}")
             }
+
+            def warFile = sh(
+                script: 'find target -maxdepth 1 -type f -name "*.war" | head -n 1',
+                returnStdout: true
+            ).trim()
+
+            if (!warFile) {
+                error('No WAR file found in target/')
+            }
+
+            def publishVersion = "${version}-${env.BUILD_NUMBER}"
+
+            echo "Group ID: ${groupId}"
+            echo "Artifact ID: ${artifactId}"
+            echo "Publishing version: ${publishVersion}"
+            echo "WAR file: ${warFile}"
+
+            nexusArtifactUploader(
+                nexusVersion: 'nexus3',
+                protocol: env.NEXUS_PROTOCOL,
+                nexusUrl: env.NEXUS_URL,
+                groupId: groupId,
+                artifactId: artifactId,
+                version: publishVersion,
+                repository: env.NEXUS_REPOSITORY,
+                credentialsId: env.NEXUS_CREDENTIAL_ID,
+                artifacts: [
+                    [
+                        artifactId: artifactId,
+                        classifier: '',
+                        file: warFile,
+                        type: 'war'
+                    ]
+                ]
+            )
+
+            echo "Successfully published ${artifactId}:${publishVersion} to Nexus"
         }
     }
 }
