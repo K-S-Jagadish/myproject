@@ -132,7 +132,7 @@ pipeline {
                         groupId: groupId,
                         version: publishVersion,
                         repository: env.NEXUS_REPOSITORY,
-                        credentialsId: 'jenkins-deploy',
+                        credentialsId: 'nexus-deploy-user-2',
                         artifacts: [
                             [
                                 artifactId: artifactId,
