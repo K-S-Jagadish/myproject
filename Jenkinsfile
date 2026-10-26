@@ -1,28 +1,28 @@
+
 pipeline {
-    
-	agent any
-        
-	tools {
-	  jdk "JDK17"	
-          maven "MAVEN3.9"
-        }
-	
-    environment {
-        NEXUS_VERSION = "nexus3"
-        NEXUS_PROTOCOL = "http"
-        NEXUS_URL = "172.31.40.209:8081"
-        NEXUS_REPOSITORY = "vprofile-release"
-	NEXUS_REPO_ID    = "vprofile-release"
-        NEXUS_CREDENTIAL_ID = "nexuslogin"
-        ARTVERSION = "${env.BUILD_ID}"
+    agent any
+
+    tools {
+        jdk "JDK17"
+        maven "MAVEN3.9"
     }
-	
-    stages{
-        
-        stage('BUILD'){
+
+    environment {
+        NEXUS_VERSION       = "nexus3"
+        NEXUS_PROTOCOL      = "http"
+        NEXUS_URL           = "172.31.40.209:8081"
+        NEXUS_REPOSITORY    = "vprofile-release"
+        NEXUS_REPO_ID       = "vprofile-release"
+        NEXUS_CREDENTIAL_ID = "nexuslogin"
+        ARTVERSION          = "${env.BUILD_ID}"
+    }
+
+    stages {
+        stage('BUILD') {
             steps {
                 sh 'mvn clean install -DskipTests'
             }
+
             post {
                 success {
                     echo 'Now Archiving...'
@@ -31,22 +31,23 @@ pipeline {
             }
         }
 
-	stage('UNIT TEST'){
+        stage('UNIT TEST') {
             steps {
                 sh 'mvn test'
             }
         }
 
-	stage('INTEGRATION TEST'){
+        stage('INTEGRATION TEST') {
             steps {
                 sh 'mvn verify -DskipUnitTests'
             }
         }
-		
-        stage ('CODE ANALYSIS WITH CHECKSTYLE'){
+
+        stage('CODE ANALYSIS WITH CHECKSTYLE') {
             steps {
                 sh 'mvn checkstyle:checkstyle'
             }
+
             post {
                 success {
                     echo 'Generated Analysis Result'
@@ -55,39 +56,49 @@ pipeline {
         }
 
         stage('CODE ANALYSIS with SONARQUBE') {
-          
-		  environment {
-             scannerHome = tool 'sonarscanner4'
-          }
-
-          steps {
-            withSonarQubeEnv('sonar-pro') {
-               sh '''${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=vprofile \
-                   -Dsonar.projectName=vprofile-repo \
-                   -Dsonar.projectVersion=1.0 \
-                   -Dsonar.sources=src/ \
-                   -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
-                   -Dsonar.junit.reportsPath=target/surefire-reports/ \
-                   -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-                   -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml'''
+            environment {
+                scannerHome = tool 'sonarscanner4'
             }
 
-            timeout(time: 10, unit: 'MINUTES') {
-               waitForQualityGate abortPipeline: true
+            steps {
+                withSonarQubeEnv('sonar-pro') {
+                    sh '''
+                        ${scannerHome}/bin/sonar-scanner \
+                          -Dsonar.projectKey=vprofile \
+                          -Dsonar.projectName=vprofile-repo \
+                          -Dsonar.projectVersion=1.0 \
+                          -Dsonar.sources=src/ \
+                          -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
+                          -Dsonar.junit.reportsPath=target/surefire-reports/ \
+                          -Dsonar.jacoco.reportsPath=target/jacoco.exec \
+                          -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
+                    '''
+                }
+
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
-          }
         }
 
-        stage("Publish to Nexus Repository Manager") {
+        stage('Publish to Nexus Repository Manager') {
             steps {
                 script {
-                    pom = readMavenPom file: "pom.xml";
-                    filesByGlob = findFiles(glob: "target/*.${pom.packaging}");
+                    def pom = readMavenPom file: 'pom.xml'
+                    def filesByGlob = findFiles(glob: "target/*.${pom.packaging}")
+
+                    if (filesByGlob.length == 0) {
+                        error "No ${pom.packaging} artifact found in target/"
+                    }
+
+                    def artifactPath = filesByGlob[0].path
+                    def artifactExists = fileExists(artifactPath)
+
                     echo "${filesByGlob[0].name} ${filesByGlob[0].path} ${filesByGlob[0].directory} ${filesByGlob[0].length} ${filesByGlob[0].lastModified}"
-                    artifactPath = filesByGlob[0].path;
-                    artifactExists = fileExists artifactPath;
-                    if(artifactExists) {
-                        echo "*** File: ${artifactPath}, group: ${pom.groupId}, packaging: ${pom.packaging}, version ${pom.version} ARTVERSION";
+
+                    if (artifactExists) {
+                        echo "File: ${artifactPath}, group: ${pom.groupId}, packaging: ${pom.packaging}, version: ${ARTVERSION}"
+
                         nexusArtifactUploader(
                             nexusVersion: NEXUS_VERSION,
                             protocol: NEXUS_PROTOCOL,
@@ -97,26 +108,69 @@ pipeline {
                             repository: NEXUS_REPOSITORY,
                             credentialsId: NEXUS_CREDENTIAL_ID,
                             artifacts: [
-                                [artifactId: pom.artifactId,
-                                classifier: '',
-                                file: artifactPath,
-                                type: pom.packaging],
-                                [artifactId: pom.artifactId,
-                                classifier: '',
-                                file: "pom.xml",
-                                type: "pom"]
+                                [
+                                    artifactId: pom.artifactId,
+                                    classifier: '',
+                                    file: artifactPath,
+                                    type: pom.packaging
+                                ],
+                                [
+                                    artifactId: pom.artifactId,
+                                    classifier: '',
+                                    file: 'pom.xml',
+                                    type: 'pom'
+                                ]
                             ]
-                        );
-                    } 
-		    else {
-                        error "*** File: ${artifactPath}, could not be found";
+                        )
+                    } else {
+                        error "File ${artifactPath} could not be found"
                     }
                 }
             }
         }
 
+        stage('Download WAR from Nexus') {
+            steps {
+                sh '''
+                    set -eu
 
+                    GROUP_ID=$(mvn -q -DforceStdout help:evaluate \
+                      -Dexpression=project.groupId)
+                    ARTIFACT_ID=$(mvn -q -DforceStdout help:evaluate \
+                      -Dexpression=project.artifactId)
+                    PROJECT_VERSION=$(mvn -q -DforceStdout help:evaluate \
+                      -Dexpression=project.version)
+
+                    GROUP_PATH=$(printf '%s' "$GROUP_ID" | tr '.' '/')
+                    PUBLISH_VERSION="${PROJECT_VERSION}-${BUILD_NUMBER}"
+                    WAR_NAME="${ARTIFACT_ID}-${PUBLISH_VERSION}.war"
+
+                    mkdir -p target
+
+                    curl --retry 3 --fail --silent --show-error --location \
+                      "http://${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/${GROUP_PATH}/${ARTIFACT_ID}/${PUBLISH_VERSION}/${WAR_NAME}" \
+                      --output target/vprofile-v2.war
+
+                    test -s target/vprofile-v2.war
+                    echo "Downloaded artifact: ${WAR_NAME}"
+                    ls -lh target/vprofile-v2.war
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                    set -eu
+
+                    IMAGE_TAG="vprofile-app:${BUILD_NUMBER}"
+
+                    docker build --tag "$IMAGE_TAG" .
+                    docker image inspect "$IMAGE_TAG" >/dev/null
+
+                    echo "Docker image built successfully: $IMAGE_TAG"
+                '''
+            }
+        }
     }
-
-
 }
