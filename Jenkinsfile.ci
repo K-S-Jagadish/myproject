@@ -11,7 +11,7 @@ pipeline {
         NEXUS_URL = '10.0.0.63:8081'
         NEXUS_PROTOCOL = 'http'
         NEXUS_REPOSITORY = 'vprofile-release'
-        NEXUS_CREDENTIAL_ID = 'nexus-deploy-user-2'
+        NEXUS_CREDENTIAL_ID = 'jenkinsdeploy'
     }
 
     stages {
@@ -132,7 +132,7 @@ pipeline {
                         groupId: groupId,
                         version: publishVersion,
                         repository: env.NEXUS_REPOSITORY,
-                        credentialsId: 'nexus-deploy-user-2',
+                        credentialsId: 'jenkinsdeploy',
                         artifacts: [
                             [
                                 artifactId: artifactId,
