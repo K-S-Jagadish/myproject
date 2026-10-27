@@ -3,7 +3,7 @@ pipeline {
     agent any
 
     tools {
-        jdk "/usr/lib/jvm/java-21-openjdk-amd64"
+        jdk "JDK21"
         maven "Maven 3.9"
     }
 
