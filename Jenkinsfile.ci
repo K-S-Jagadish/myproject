@@ -14,7 +14,7 @@ pipeline {
         NEXUS_REPOSITORY    = 'vprofile-release'
         NEXUS_REPO_ID       = 'vprofile-release'
         NEXUS_CREDENTIAL_ID = 'jenkinsdeploy'
-        ARTVERSION          = "${env.BUILD_NUMBER}"
+        ARTVERSION = "v2-${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -131,30 +131,34 @@ pipeline {
 
         stage('Download WAR from Nexus') {
             steps {
-                sh '''
-                    set -eu
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'jenkinsdeploy',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
 
-                    GROUP_ID=$(mvn -q -DforceStdout help:evaluate \
-                      -Dexpression=project.groupId)
-                    ARTIFACT_ID=$(mvn -q -DforceStdout help:evaluate \
-                      -Dexpression=project.artifactId)
-                    PROJECT_VERSION=$(mvn -q -DforceStdout help:evaluate \
-                      -Dexpression=project.version)
+                        PUBLISH_VERSION="v2-${BUILD_NUMBER}"
+                        WAR_NAME="vprofile-${PUBLISH_VERSION}.war"
+                        GROUP_PATH="com/visualpathit"
+                        ARTIFACT_ID="vprofile"
 
-                    GROUP_PATH=$(printf '%s' "$GROUP_ID" | tr '.' '/')
-                    PUBLISH_VERSION="${PROJECT_VERSION}-${BUILD_NUMBER}"
-                    WAR_NAME="${ARTIFACT_ID}-${PUBLISH_VERSION}.war"
+                        mkdir -p target
 
-                    mkdir -p target
+                        curl --retry 3 --fail --silent --show-error --location \
+                          --user "$NEXUS_USER:$NEXUS_PASSWORD" \
+                          "http://${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/${GROUP_PATH}/${ARTIFACT_ID}/${PUBLISH_VERSION}/${WAR_NAME}" \
+                          --output target/vprofile-v2.war
 
-                    curl --retry 3 --fail --silent --show-error --location \
-                      "http://${NEXUS_URL}/repository/${NEXUS_REPOSITORY}/${GROUP_PATH}/${ARTIFACT_ID}/${PUBLISH_VERSION}/${WAR_NAME}" \
-                      --output target/vprofile-v2.war
+                        test -s target/vprofile-v2.war
 
-                    test -s target/vprofile-v2.war
-                    echo "Downloaded artifact: ${WAR_NAME}"
-                    ls -lh target/vprofile-v2.war
-                '''
+                        echo "Downloaded artifact: ${WAR_NAME}"
+                        ls -lh target/vprofile-v2.war
+                    '''
+                }
             }
         }
 
